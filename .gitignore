@@ -1,0 +1,41 @@
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+*.egg
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# OS files
+.DS_Store
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Testing & tooling caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Logs
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Credentials (do NOT commit secrets)
+credentials/
