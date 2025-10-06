@@ -44,15 +44,17 @@ jobs:
         run: |
           IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/golf-loader:${{ github.sha }}
 
-          gcloud run jobs update ${{ env.JOB_NAME }} \
-            --image $IMAGE \
-            --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }} \
-            || gcloud run jobs create ${{ env.JOB_NAME }} \
-            --image $IMAGE \
-            --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }} \
-            --service-account roundee-backend-firestore@buoyant-ability-465005-d7.iam.gserviceaccount.com
+          if gcloud run jobs describe ${{ env.JOB_NAME }} --region ${{ env.REGION }} --project ${{ env.PROJECT_ID }} >/dev/null 2>&1; then
+            gcloud run jobs update ${{ env.JOB_NAME }} \
+              --image $IMAGE \
+              --region ${{ env.REGION }} \
+              --project ${{ env.PROJECT_ID }}
+          else
+            gcloud run jobs create ${{ env.JOB_NAME }} \
+              --image $IMAGE \
+              --region ${{ env.REGION }} \
+              --project ${{ env.PROJECT_ID }}
+          fi
 
       - name: Run Cloud Run Job
         if: github.event_name == 'workflow_dispatch'
