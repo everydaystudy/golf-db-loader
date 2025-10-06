@@ -51,7 +51,8 @@ jobs:
             || gcloud run jobs create ${{ env.JOB_NAME }} \
             --image $IMAGE \
             --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }}
+            --project ${{ env.PROJECT_ID }} \
+            --service-account roundee-backend-firestore@buoyant-ability-465005-d7.iam.gserviceaccount.com
 
       - name: Run Cloud Run Job
         if: github.event_name == 'workflow_dispatch'
