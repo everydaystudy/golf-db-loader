@@ -7,6 +7,7 @@ import re
 import uuid
 import hashlib
 import datetime as dt
+import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Iterable
 
 import requests
@@ -54,6 +55,40 @@ def to_float(value: Any) -> Optional[float]:
         return float(value)
     except Exception:
         return None
+
+
+def normalize_text(text: str) -> str:
+    """특수문자 정규화 (okina, apostrophe 등 제거)"""
+    if not text:
+        return ""
+    # NFD 분해 후 결합문자 제거
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    # okina, apostrophe 등 제거
+    text = text.replace("ʻ", "").replace("'", "").replace("`", "").replace("'", "")
+    return text.strip().lower()
+
+
+def generate_ngrams(text: str, n: int = 3) -> List[str]:
+    """N-gram 생성 (중복 제거)"""
+    text = (text or "").strip().lower()
+    if not text or len(text) < n:
+        return []
+
+    grams = []
+    for i in range(len(text) - n + 1):
+        gram = text[i : i + n]
+        if gram not in grams:
+            grams.append(gram)
+    return grams
+
+
+def generate_name_tokens(name: str) -> List[str]:
+    """이름을 토큰으로 분리 (공백 기준)"""
+    if not name:
+        return []
+    tokens = [t.lower() for t in name.split() if t.strip()]
+    return tokens
 
 
 def parse_holes(tags: Dict[str, Any]) -> Optional[int]:
@@ -163,6 +198,10 @@ def normalize_course(element: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     doc = {
         "name": name,
         "name_lower": name.lower(),
+        "name_lower_normalized": normalize_text(name),
+        "name_tokens": generate_name_tokens(name),
+        "name_ngrams": generate_ngrams(name.lower(), 3),
+        "name_ngrams_normalized": generate_ngrams(normalize_text(name), 3),
         "aliases": aliases,
         "city": city,
         "state": state,
