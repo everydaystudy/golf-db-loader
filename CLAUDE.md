@@ -24,7 +24,7 @@ pip install -r requirements.txt
 ```
 
 ### Authentication
-The script auto-detects credentials at `credentials/serviceAccountKey.json` if `GOOGLE_APPLICATION_CREDENTIALS` is not set (see `ensure_gcp_credentials()` in golf_loader.py:30).
+The script auto-detects credentials at `credentials/serviceAccountKey.json` if `GOOGLE_APPLICATION_CREDENTIALS` is not set (see `ensure_gcp_credentials()` in golf_loader.py:31).
 
 ### Running Locally
 ```bash
@@ -81,17 +81,21 @@ gcloud run jobs execute golf-loader-all --region $REGION --project $PROJECT
 ## Architecture
 
 ### Core Data Flow
-1. **Fetch** (golf_loader.py:202): Queries Overpass API per state using ISO3166-2 area codes
-2. **Normalize** (golf_loader.py:124): Transforms OSM tags into standardized schema
-3. **Fingerprint** (golf_loader.py:108): Computes SHA256 hash of key fields for deduplication
-4. **Upsert** (golf_loader.py:231): Batch-writes to Firestore (400 docs/batch), skips unchanged docs if `--skip-unchanged`
-5. **Stale Management** (golf_loader.py:283): Marks unseen docs as stale via `last_seen_run_id` tracking; purges after N days
+1. **Fetch** (golf_loader.py:241): Queries Overpass API per state using ISO3166-2 area codes
+2. **Normalize** (golf_loader.py:159): Transforms OSM tags into standardized schema; generates search fields (tokens, n-grams, normalized text)
+3. **Fingerprint** (golf_loader.py:143): Computes SHA256 hash of key fields for deduplication
+4. **Upsert** (golf_loader.py:270): Batch-writes to Firestore (400 docs/batch), skips unchanged docs if `--skip-unchanged`
+5. **Stale Management** (golf_loader.py:322): Marks unseen docs as stale via `last_seen_run_id` tracking; purges after N days
 
 ### Document Schema
 ```json
 {
   "name": "Pebble Beach Golf Links",
   "name_lower": "pebble beach golf links",
+  "name_lower_normalized": "pebble beach golf links",
+  "name_tokens": ["pebble", "beach", "golf", "links"],
+  "name_ngrams": ["peb", "ebb", "bbl", "ble", "..."],
+  "name_ngrams_normalized": ["peb", "ebb", "bbl", "ble", "..."],
   "aliases": ["Pebble Beach", "PBGL"],
   "city": "Pebble Beach",
   "state": "CA",
@@ -114,17 +118,20 @@ gcloud run jobs execute golf-loader-all --region $REGION --project $PROJECT
 Uses `slugify()` (golf_loader.py:42): concatenates `name-city-state`, lowercased, non-alphanumeric stripped, max 200 chars. Example: `pebble-beach-golf-links-pebble-beach-ca`
 
 ### Key Functions
-- `normalize_course()` (golf_loader.py:124): Parses OSM elements into doc structure; rejects nodes without names or coordinates
-- `compute_osm_fingerprint()` (golf_loader.py:108): Deterministic hash for change detection
-- `upsert_courses()` (golf_loader.py:231): Batch upserts with fingerprint comparison; uses `client.get_all()` for bulk reads (300 docs/batch)
-- `mark_stale_for_states()` (golf_loader.py:283): Marks docs not seen in current run_id
-- `purge_stale()` (golf_loader.py:307): Deletes docs with `stale=true` and `stale_at` older than threshold
+- `normalize_course()` (golf_loader.py:159): Parses OSM elements into doc structure; rejects nodes without names or coordinates; generates search fields
+- `normalize_text()` (golf_loader.py:60): Removes diacritics and special characters (okina, apostrophes) for search normalization
+- `generate_ngrams()` (golf_loader.py:72): Creates 3-character n-grams for fuzzy search indexing
+- `generate_name_tokens()` (golf_loader.py:86): Splits names into whitespace-separated tokens for search
+- `compute_osm_fingerprint()` (golf_loader.py:143): Deterministic hash for change detection
+- `upsert_courses()` (golf_loader.py:270): Batch upserts with fingerprint comparison; uses `client.get_all()` for bulk reads (300 docs/batch)
+- `mark_stale_for_states()` (golf_loader.py:322): Marks docs not seen in current run_id
+- `purge_stale()` (golf_loader.py:346): Deletes docs with `stale=true` and `stale_at` older than threshold
 
 ### Retry Logic
-`call_overpass()` (golf_loader.py:195): Uses `tenacity` with exponential backoff (1-60s, max 5 attempts)
+`call_overpass()` (golf_loader.py:234): Uses `tenacity` with exponential backoff (1-60s, max 5 attempts)
 
 ### State Coverage
-Processes all 50 US states via `US_STATES` constant (golf_loader.py:17). Default behavior: `--all` is auto-enabled if no `--state` flags provided (golf_loader.py:413).
+Processes all 50 US states via `US_STATES` constant (golf_loader.py:18). Default behavior: `--all` is auto-enabled if no `--state` flags provided (golf_loader.py:452).
 
 ## Adding New Firestore Fields
 
@@ -221,6 +228,20 @@ python add_normalized_fields.py
 **Performance:** ~30s for 1,000 docs, ~5min for 10,000 docs
 
 **Indexing:** Firestore auto-creates indexes for new fields. For composite indexes, create via Firebase Console (Firestore → Indexes) or define in `firestore.indexes.json`.
+
+## CI/CD
+
+### GitHub Actions Workflow
+Automated deployment configured in `.github/workflows/deploy-cloud-run-job.yml`:
+- **Triggers**: Push to `main` branch or manual `workflow_dispatch`
+- **Steps**:
+  1. Authenticates using `GCP_SA_KEY` secret
+  2. Builds Docker image and tags with commit SHA + `latest`
+  3. Pushes to Artifact Registry (`us-central1-docker.pkg.dev/buoyant-ability-465005-d7/golf-db-loader`)
+  4. Creates or updates Cloud Run Job `golf-loader-all`
+  5. Optionally executes job if triggered manually
+
+**Required Secret**: `GCP_SA_KEY` (service account JSON with Artifact Registry and Cloud Run permissions)
 
 ## Important Constraints
 
