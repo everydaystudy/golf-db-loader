@@ -11,7 +11,6 @@ env:
   REGION: us-central1
   REPO: golf-db-loader
   JOB_NAME: golf-loader-all
-  SERVICE_ACCOUNT: golf-loader-sa@buoyant-ability-465005-d7.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -52,8 +51,7 @@ jobs:
             || gcloud run jobs create ${{ env.JOB_NAME }} \
             --image $IMAGE \
             --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }} \
-            --service-account ${{ env.SERVICE_ACCOUNT }}
+            --project ${{ env.PROJECT_ID }}
 
       - name: Run Cloud Run Job
         if: github.event_name == 'workflow_dispatch'
